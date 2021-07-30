@@ -85,7 +85,8 @@ func (si *signalInstruction) apply(input common.SignalCheckInput) (common.Signal
 		resultInstruction, ok := instruction.apply(si.rawInput, &input)
 		if ok {
 			si.tokenizedInput = resultInstruction.tokenizedInput
-			return input, nil
+			si.err = resultInstruction.err
+			return input, si.err
 		}
 	}
 	err := fmt.Errorf("%w at line %v with content [%v]", errUnrecognizedInstruction, si.lineNumber, si.rawInput)
@@ -102,6 +103,7 @@ const (
 
 var (
 	errUnrecognizedInstruction = errors.New("unrecognized instruction")
+	errMalformedFloat          = errors.New("malformed float")
 )
 
 type instruction interface {
