@@ -22,6 +22,7 @@ func main() {
 	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/transpile", transpileHandler)
 	http.HandleFunc("/run", runHandler)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 
 	if err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil); err != nil {
 		log.Fatal(err)
