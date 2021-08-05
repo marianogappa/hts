@@ -16,10 +16,12 @@ func NewSignalTranspiler() *SignalTranspiler {
 }
 
 type SignalTranspilerOutput struct {
-	Errors         []string                `json:"errors"`
-	Warnings       []string                `json:"warnings"`
-	TokenizedInput [][]inputToken          `json:"tokenizedInput"`
-	SignalInput    common.SignalCheckInput `json:"signalInput"`
+	Errors         []string                 `json:"errors"`
+	Warnings       []string                 `json:"warnings"`
+	TokenizedInput [][]inputToken           `json:"tokenizedInput"`
+	SignalInput    common.SignalCheckInput  `json:"signalInput"`
+	SignalOutput   common.SignalCheckOutput `json:"signalOutput"`
+	isShortSet     bool
 }
 
 func (o SignalTranspilerOutput) error() error {
@@ -33,10 +35,10 @@ func (o SignalTranspilerOutput) error() error {
 func (t SignalTranspiler) Transpile(input string) (SignalTranspilerOutput, error) {
 	signalInstructions := []*signalInstruction{}
 	for i, line := range strings.Split(input, "\n") {
-		signalInstructions = append(signalInstructions, newSignalInstruction(line, i))
+		signalInstructions = append(signalInstructions, newSignalInstruction(line, i, false))
 	}
 	output := SignalTranspilerOutput{
-		SignalInput: common.SignalCheckInput{},
+		SignalInput: common.SignalCheckInput{ReturnCandlesticks: true},
 		Errors:      []string{},
 		Warnings:    []string{},
 	}
@@ -46,12 +48,25 @@ func (t SignalTranspiler) Transpile(input string) (SignalTranspilerOutput, error
 	// 4. Do a validation pass: if required params are missing, fail. If there are still untranspiled instructions, fail.
 	for _, signalInstruction := range signalInstructions {
 		var err error
-		output.SignalInput, err = signalInstruction.apply(output.SignalInput)
+		output, err = signalInstruction.apply(output)
 		if err != nil {
 			output.Errors = append(output.Errors, err.Error())
 			continue
 		}
 	}
+
+	signalInstructions = append(signalInstructions, t.calculateInferredInstructions(output)...)
+
+	for _, signalInstruction := range signalInstructions {
+		var err error
+		output, err = signalInstruction.apply(output)
+		if err != nil {
+			output.Errors = append(output.Errors, err.Error())
+			continue
+		}
+	}
+
+	t.calculateErrorsAndWarnings(&output)
 
 	for _, signalInstruction := range signalInstructions {
 		if len(signalInstruction.tokenizedInput) == 0 {
@@ -64,6 +79,35 @@ func (t SignalTranspiler) Transpile(input string) (SignalTranspilerOutput, error
 	return output, output.error()
 }
 
+func (t SignalTranspiler) calculateInferredInstructions(sto SignalTranspilerOutput) []*signalInstruction {
+	inferredInstructions := []*signalInstruction{}
+	if sto.SignalInput.Exchange == "" {
+		inferredInstructions = append(inferredInstructions, newSignalInstruction("EXCHANGE: binance", 0, true))
+	}
+	if !sto.isShortSet {
+		inferredInstructions = append(inferredInstructions, newSignalInstruction("LONG", 0, true))
+	}
+	if sto.SignalInput.InvalidateAfterSeconds == 0 {
+		inferredInstructions = append(inferredInstructions, newSignalInstruction("INVALIDATE AFTER 2 DAYS", 0, true))
+	}
+	if sto.SignalInput.EnterRangeHigh == 0 && sto.SignalInput.EnterRangeLow == 0 {
+		inferredInstructions = append(inferredInstructions, newSignalInstruction("ENTER: IMMEDIATELY", 0, true))
+	}
+	return inferredInstructions
+}
+
+func (t SignalTranspiler) calculateErrorsAndWarnings(sto *SignalTranspilerOutput) {
+	if sto.SignalInput.BaseAsset == "" || sto.SignalInput.QuoteAsset == "" {
+		sto.Errors = append(sto.Errors, fmt.Errorf("%w, e.g. MARKET: BTC/USDT", errMarketRequired).Error())
+	}
+	if sto.SignalInput.InitialISO8601 == "" {
+		sto.Errors = append(sto.Errors, fmt.Errorf("%w, e.g. START AT: 2021-06-22T15:21:03Z", errInitialISO8601Required).Error())
+	}
+	if sto.SignalInput.EnterRangeLow == 0.0 && sto.SignalInput.EnterRangeHigh == 0.0 {
+		sto.Errors = append(sto.Errors, fmt.Errorf("%w, e.g. ENTER BETWEEN: 0.1 - 0.5 or ENTER: IMMEDIATELY", errEnterRangeRequired).Error())
+	}
+}
+
 type inputToken struct {
 	Input     string `json:"input"`
 	TokenType string `json:"tokenType"`
@@ -74,38 +118,66 @@ type signalInstruction struct {
 	lineNumber     int
 	err            error
 	tokenizedInput []inputToken
+	isApplied      bool
+	isInferred     bool
 }
 
-func newSignalInstruction(rawInput string, lineNumber int) *signalInstruction {
-	return &signalInstruction{rawInput: rawInput, lineNumber: lineNumber}
+func newSignalInstruction(rawInput string, lineNumber int, isInferred bool) *signalInstruction {
+	return &signalInstruction{rawInput: rawInput, lineNumber: lineNumber, isInferred: isInferred}
 }
 
-func (si *signalInstruction) apply(input common.SignalCheckInput) (common.SignalCheckInput, error) {
+func (si *signalInstruction) apply(input SignalTranspilerOutput) (SignalTranspilerOutput, error) {
+	if si.isApplied {
+		return input, nil
+	}
 	for _, instruction := range instructions {
 		resultInstruction, ok := instruction.apply(si.rawInput, &input)
 		if ok {
 			si.tokenizedInput = resultInstruction.tokenizedInput
+			if si.isInferred {
+				si.tokenizedInput = append(si.tokenizedInput, inputToken{Input: " // INFERRED", TokenType: TOKEN_COMMENT})
+			}
 			si.err = resultInstruction.err
+			si.isApplied = true
 			return input, si.err
 		}
 	}
 	err := fmt.Errorf("%w at line %v with content [%v]", errUnrecognizedInstruction, si.lineNumber, si.rawInput)
 	si.err = err
-	return common.SignalCheckInput{}, err
+	si.isApplied = true
+	return input, err
 }
 
 const (
 	TOKEN_INSTRUCTION = "instruction"
 	TOKEN_PUNCTUATION = "punctuation"
 	TOKEN_EXPRESSION  = "expression"
+	TOKEN_COMMENT     = "comment"
 	TOKEN_ERROR       = "error"
 )
 
 var (
-	errUnrecognizedInstruction = errors.New("unrecognized instruction")
-	errMalformedFloat          = errors.New("malformed float")
+	errUnrecognizedInstruction            = errors.New("unrecognized instruction")
+	errMarketAlreadySupplied              = errors.New("market already supplied")
+	errEnterRangeAlreadySupplied          = errors.New("enter range already supplied")
+	errInvalidateAfterDaysAlreadySupplied = errors.New("timeout after days already supplied")
+	errIsShortAlreadySupplied             = errors.New("short/long already supplied")
+	errInitialISO8601AlreadySupplied      = errors.New("'start at' already supplied")
+	errExchangeAlreadySupplied            = errors.New("exchange already supplied")
+	errStopLossAlreadySupplied            = errors.New("stop loss already supplied")
+	errMaximumInvalidation7Days           = errors.New("maximum timeout after 7 days")
+	errMalformedInteger                   = errors.New("malformed integer")
+	errMalformedFloat                     = errors.New("malformed float")
+	errInvalidEnterRange                  = errors.New("invalid enter range")
+	errInvalidEnterAt                     = errors.New("invalid 'enter at' format")
+	errUnsupportedExchange                = errors.New("unsupported exchange")
+	errUnsupportedDateTimeFormat          = errors.New("unsupported datetime format")
+	errMarketRequired                     = errors.New("'market' required")
+	errEnterRangeRequired                 = errors.New("enter range required")
+	errInitialISO8601Required             = errors.New("'start at' required")
+	errMixesSeparators                    = errors.New("mixing number separators is not supported, use comma, dash or AND")
 )
 
 type instruction interface {
-	apply(rawInput string, signalInput *common.SignalCheckInput) (signalInstruction, bool)
+	apply(rawInput string, sto *SignalTranspilerOutput) (signalInstruction, bool)
 }

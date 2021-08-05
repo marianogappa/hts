@@ -1,2 +1,8 @@
-github.com/marianogappa/signal-checker v0.0.0-20210723124157-ed2e978cfa58 h1:/zaY07QSjBkoDyppnu8KVhbFbUvxUJfkRqdrPXKH034=
-github.com/marianogappa/signal-checker v0.0.0-20210723124157-ed2e978cfa58/go.mod h1:DyLXd44gzu5HzzmMYWXq3abmKMP8q1SY/O2ykJK35ps=
+github.com/marianogappa/signal-checker v0.0.0-20210730141243-e7393248320b h1:zK9/BTz3DMzkVN1xkhF60TR2TYI54wJJw2R8cVxM/eI=
+github.com/marianogappa/signal-checker v0.0.0-20210730141243-e7393248320b/go.mod h1:DyLXd44gzu5HzzmMYWXq3abmKMP8q1SY/O2ykJK35ps=
+github.com/marianogappa/signal-checker v0.0.0-20210802140511-3f3709acad95 h1:HWA4RQyz/Vs72Xz+1K5ngVwDZT+2f8bzaI3aJ7GKXYU=
+github.com/marianogappa/signal-checker v0.0.0-20210802140511-3f3709acad95/go.mod h1:DyLXd44gzu5HzzmMYWXq3abmKMP8q1SY/O2ykJK35ps=
+github.com/marianogappa/signal-checker v0.0.0-20210802151544-7284b8b03785 h1:G1yPxpwA3bWGc5fCSfbbXKn10dp7IsKLO8QtHY3d9Vo=
+github.com/marianogappa/signal-checker v0.0.0-20210802151544-7284b8b03785/go.mod h1:DyLXd44gzu5HzzmMYWXq3abmKMP8q1SY/O2ykJK35ps=
+github.com/marianogappa/signal-checker v0.0.0-20210802154133-75850de3f6d0 h1:S/PRYBtDp85BV2l4clxFc+BwQimSovzi4y9rfPAVYkQ=
+github.com/marianogappa/signal-checker v0.0.0-20210802154133-75850de3f6d0/go.mod h1:DyLXd44gzu5HzzmMYWXq3abmKMP8q1SY/O2ykJK35ps=
